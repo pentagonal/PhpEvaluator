@@ -9,8 +9,12 @@ Only test for full coded php files.
 
 ## COMPOSER
 
-```bash
-composer install pentagonal/php-evaluator
+```json
+{
+  "require": {
+    "pentagonal/php-evaluator": "~1"
+  }
+}
 ```
 
 ## LICENSE
