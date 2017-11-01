@@ -10,7 +10,7 @@ Only test for full coded php files.
 ## COMPOSER
 
 ```bash
-composer install pentagonal/php-evaluator
+composer require pentagonal/php-evaluator
 ```
 
 ## LICENSE
