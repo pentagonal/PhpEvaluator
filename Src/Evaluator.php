@@ -59,24 +59,26 @@ final class Evaluator
     }
 
     /**
-     * @param string $content
+     * Testing string with @uses token_get_all()
+     *
+     * @param string $content content to check
      *
      * @return array|bool
      */
     private function tokenTestReport(string $content)
     {
-        $lastError = error_get_last();
-        if (is_array($lastError) && $lastError['file'] == __FILE__) {
-            error_clear_last();
-        }
-
+        // suppress warning
         $this->suppressErrorReport(true);
         token_get_all($content);
+        // fall back to original
         $this->suppressErrorReport(false);
+        // get last error
         $lastError = error_get_last();
+        // if not empty & last error is current execution
         $trace = is_array($lastError)
                  && $lastError['file'] === __FILE__
                  && $lastError['line'] < __LINE__
+                 && $lastError['line'] > (__LINE__ - 10) # on function
                  ? debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS)
                  : null;
         $trace = !empty($trace[0]) ? $trace[0] : null;
@@ -87,6 +89,8 @@ final class Evaluator
             && $trace['file'] === __FILE__
             && !empty($lastError = error_get_last())
         ) {
+            // clear last errors -> the token_get_all() error
+            error_clear_last();
             return $lastError;
         }
 
@@ -94,10 +98,11 @@ final class Evaluator
     }
 
     /**
-     * Check
+     * Check & Validate php code by string, this only works on some certains conditions
+     * because this is simple php code evaluator.
      *
-     * @param string $content
-     * @param string|null $file
+     * @param string $content   string that php full of php code
+     * @param string|null $file file to append as error file info
      *
      * @return bool
      * @throws BadSyntaxExceptions
