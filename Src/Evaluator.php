@@ -185,7 +185,7 @@ final class Evaluator
             );
             throw new BadSyntaxExceptions(
                 $errStr,
-                $status,
+                self::E_PARSE,
                 $file ?:__FILE__,
                 $line
             );
