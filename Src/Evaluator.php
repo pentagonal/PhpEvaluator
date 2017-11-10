@@ -29,7 +29,7 @@ namespace Pentagonal\PhpEvaluator;
 
 /**
  * Class Evaluator
- * @package Pentagonal\PhpFileEvaluator
+ * @package Pentagonal\PhpEvaluator
  */
 final class Evaluator
 {
@@ -157,8 +157,42 @@ final class Evaluator
             $suffix = "<?php\n{$suffix}";
         }
 
+        if (function_exists('exec')
+            // create unique temporary file
+            && ($tempNameFile = tempnam(sys_get_temp_dir(), 'pentagonal_evaluator__'))
+            // put file to temporary file
+            && @file_put_contents($tempNameFile, $content)
+        ) {
+            // use exec for lint
+            exec(PHP_BINARY . " -l {$tempNameFile} 2>&1", $output, $status);
+            // remove temp file
+            unlink($tempNameFile);
+            if ($status === 0) {
+                return true;
+            }
+
+            $errStr = (string) reset($output);
+            preg_match('/on\s+line\s+([0-9]+)/', $errStr, $match);
+            $line = isset($match[1]) ? intval($match[1]) : 0;
+            $tempNameFileRegex = preg_quote($tempNameFile, '/');
+            $errStr = preg_replace(
+                [
+                    "/\s*in\s+{$tempNameFileRegex}.+/",
+                    "/^[^\:]+:\s*/"
+                ],
+                '',
+                $errStr
+            );
+            throw new BadSyntaxExceptions(
+                $errStr,
+                $status,
+                $file ?:__FILE__,
+                $line
+            );
+        }
+
         try {
-            // evaluate
+            // evaluate if exec function does not exists
             eval("return true; if (0) { ?>{$content}\n{$suffix}");
         } catch (\Throwable $e) {
             throw new BadSyntaxExceptions(
