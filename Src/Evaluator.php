@@ -145,7 +145,7 @@ final class Evaluator
             );
         }
 
-        $tmpContent = strpos('?>', $content) ? preg_replace(
+        $tmpContent = strpos($content, '?>') ? preg_replace(
             [
                 '~/\*.*?\*/~s',
                 '~(?://|\#)[^\n]+~m',
