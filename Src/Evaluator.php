@@ -145,8 +145,19 @@ final class Evaluator
             );
         }
 
-        if (($endTag = substr(rtrim($content), -2)) === '?>') {
-            if (substr($content, -2) !== $endTag) {
+        $tmpContent = strpos('?>', $content) ? preg_replace(
+            [
+                '~/\*.*?\*/~s',
+                '~(?://|\#)[^\n]+~m',
+            ],
+            '',
+            $content
+        ) : null;
+
+        if (($endTag = substr(rtrim($content), -2)) === '?>'
+            || $tmpContent && preg_match('`\?\>.+`sm', $tmpContent)
+        ) {
+            if (!$endTag || substr($content, -2) !== $endTag) {
                 throw new BadSyntaxExceptions(
                     'File content buffer on after closing php tag',
                     self::E_BUFFER,
@@ -154,7 +165,8 @@ final class Evaluator
                     strrpos($content, '?>') + 1
                 );
             }
-            $suffix = "<?php\n{$suffix}";
+
+            $suffix = $endTag ? "<?php\n{$suffix}" : $suffix;
         }
 
         if (function_exists('exec')
