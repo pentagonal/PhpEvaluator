@@ -144,18 +144,14 @@ final class Evaluator
                 $line
             );
         }
-
-        $tmpContent = strpos($content, '?>') ? preg_replace(
-            [
-                '~/\*.*?\*/~s',
-                '~(?://|\#)[^\n]+~m',
-            ],
-            '',
-            $content
-        ) : null;
-
+        $realContent = $content;
+        // remove comments
+        $content = preg_replace([
+            '~/\*.*?\*/~s',
+            '~(?://|\#)[^\n]+~m',
+        ], '', $content);
         if (($endTag = substr(rtrim($content), -2)) === '?>'
-            || $tmpContent && preg_match('`\?\>.+`sm', $tmpContent)
+            || strpos($content, '?>') && preg_match('`\?\>.+`sm', $tmpContent)
         ) {
             if (!$endTag || substr($content, -2) !== $endTag) {
                 throw new BadSyntaxExceptions(
@@ -175,34 +171,83 @@ final class Evaluator
             // put file to temporary file
             && @file_put_contents($tempNameFile, $content)
         ) {
-            // use exec for lint
-            exec(PHP_BINARY . " -l {$tempNameFile} 2>&1", $output, $status);
-            // remove temp file
-            unlink($tempNameFile);
-            if ($status === 0) {
-                return true;
+            $binaries = [
+                PHP_BINARY
+            ];
+            if (DIRECTORY_SEPARATOR === '/') {
+                array_unshift($binaries, '/usr/bin/env php');
             }
 
+            foreach ($binaries as $bin) {
+                // use exec for lint
+                exec($bin . " -l {$tempNameFile} 2>&1", $output, $status);
+                if ($status === 0) {
+                    unlink($tempNameFile);
+                    return true;
+                }
+            }
+
+            // remove temp file
+            unlink($tempNameFile);
             $errStr = (string) reset($output);
-            preg_match('/on\s+line\s+([0-9]+)/', $errStr, $match);
-            $line = isset($match[1]) ? intval($match[1]) : 0;
-            $tempNameFileRegex = preg_quote($tempNameFile, '/');
-            $errStr = preg_replace(
-                [
-                    "/\s*in\s+{$tempNameFileRegex}.+/",
-                    "/^[^\:]+:\s*/"
-                ],
-                '',
-                $errStr
-            );
-            throw new BadSyntaxExceptions(
-                $errStr,
-                self::E_PARSE,
-                $file ?:__FILE__,
-                $line
-            );
+            preg_match('/on\s+line\s+([0-9]+)/i', $errStr, $match);
+            if (!empty($match)) {
+                $line = isset($match[1]) ? intval($match[1]) : 0;
+                $tempNameFileRegex = preg_quote($tempNameFile, '/');
+                $errStr = preg_replace(
+                    [
+                        "/\s*in\s+{$tempNameFileRegex}.+/",
+                        "/^[^\:]+:\s*/"
+                    ],
+                    '',
+                    $errStr
+                );
+                throw new BadSyntaxExceptions(
+                    $errStr,
+                    self::E_PARSE,
+                    $file ?: __FILE__,
+                    $line
+                );
+            }
         }
 
+        // check namespace
+        preg_match_all('/(?:namespace|use)\s+\\\?([^;]+);(?:[^\n]+)?/mi', $content, $match);
+        if (!empty($match[1])) {
+            foreach ($match[1] as $key => $ns) {
+                if (!preg_match(
+                        '~^\\\?(?:[_a-zA-Z](?:[a-zA-Z0-9_]+)?)(?:(?:\\\[_a-zA-Z][a-zA-Z0-9_]+){1,})?\s*$~',
+                        $ns
+                    )
+                ) {
+                    foreach (explode("\n", $realContent) as $k => $v) {
+                        if (strpos($v, $match[0][$key]) !== false) {
+                            $line = $k;
+                            break;
+                        }
+                    }
+
+                    throw new BadSyntaxExceptions(
+                        sprintf('Error syntax on: %s', $match[0][$key]),
+                        self::E_PARSE,
+                        $file ?: __FILE__,
+                        $line
+                    );
+
+                    return false;
+                }
+            }
+        }
+
+        unset($realContent);
+        $content = preg_replace(
+            [
+                '/((?:namespace|use)\s+)([^\;]+);/i',
+                '/(<?php\s+)declare\s*\([^\)]+\)\s*;/i',
+            ],
+            ['', '$1'],
+            $content
+        );
         try {
             // evaluate if exec function does not exists
             eval("return true; if (0) { ?>{$content}\n{$suffix}");
